@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SeeFood — Hot Dog Classifier</title>
+  <style>
+    /* ── Reset + base ─────────────────────────────────────────────────────── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    h1 { font-size: 2rem; margin-bottom: 4px; }
+    p.subtitle { color: #666; margin-bottom: 32px; }
+
+    /* ── Upload box ───────────────────────────────────────────────────────── */
+    #drop-zone {
+      width: 100%;
+      max-width: 420px;
+      border: 2px dashed #aaa;
+      border-radius: 12px;
+      background: #fff;
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    #drop-zone.drag-over { border-color: #e74c3c; background: #fff5f5; }
+
+    #drop-zone p { color: #888; font-size: 0.95rem; }
+
+    #choose-btn {
+      margin-top: 12px;
+      padding: 8px 20px;
+      background: #e74c3c;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    #choose-btn:hover { background: #c0392b; }
+
+    /* Hidden file input — triggered by the button */
+    #file-input { display: none; }
+
+    /* ── Preview image ────────────────────────────────────────────────────── */
+    #preview {
+      display: none;           /* hidden until a file is chosen */
+      max-width: 420px;
+      width: 100%;
+      margin-top: 20px;
+      border-radius: 10px;
+      object-fit: cover;
+      max-height: 280px;
+    }
+
+    /* ── Spinner ──────────────────────────────────────────────────────────── */
+    #spinner {
+      display: none;
+      margin-top: 20px;
+      width: 36px; height: 36px;
+      border: 4px solid #ddd;
+      border-top-color: #e74c3c;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Result card ──────────────────────────────────────────────────────── */
+    #result {
+      display: none;           /* hidden until we have a prediction */
+      margin-top: 20px;
+      max-width: 420px;
+      width: 100%;
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px 24px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    #result-label {
+      font-size: 1.6rem;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+    #result-confidence { color: #555; font-size: 0.95rem; }
+
+    /* ── Error message ────────────────────────────────────────────────────── */
+    #error {
+      display: none;
+      margin-top: 16px;
+      max-width: 420px;
+      width: 100%;
+      background: #ffeaea;
+      border: 1px solid #f5c6cb;
+      color: #c0392b;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🌭 SeeFood</h1>
+  <p class="subtitle">Drop a photo — is it a hot dog?</p>
+
+  <!-- Upload area -->
+  <div id="drop-zone">
+    <p>Drag &amp; drop an image here</p>
+    <button id="choose-btn" onclick="document.getElementById('file-input').click()">
+      Choose File
+    </button>
+    <input type="file" id="file-input" accept="image/*" />
+  </div>
+
+  <!-- Preview of the chosen image -->
+  <img id="preview" alt="Selected image preview" />
+
+  <!-- Loading spinner -->
+  <div id="spinner"></div>
+
+  <!-- Prediction result -->
+  <div id="result">
+    <div id="result-label"></div>
+    <div id="result-confidence"></div>
+  </div>
+
+  <!-- Error message -->
+  <div id="error"></div>
+
+<script>
+  // ── Element references ───────────────────────────────────────────────────
+  const dropZone   = document.getElementById("drop-zone");
+  const fileInput  = document.getElementById("file-input");
+  const preview    = document.getElementById("preview");
+  const spinner    = document.getElementById("spinner");
+  const result     = document.getElementById("result");
+  const resultLbl  = document.getElementById("result-label");
+  const resultConf = document.getElementById("result-confidence");
+  const errorBox   = document.getElementById("error");
+
+  const API_URL = "http://localhost:8000/predict";
+
+  // ── Drag-and-drop events ─────────────────────────────────────────────────
+  dropZone.addEventListener("dragover", e => {
+    e.preventDefault();                         // prevent browser from opening the file
+    dropZone.classList.add("drag-over");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("drag-over");
+  });
+
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const file = e.dataTransfer.files[0];       // grab the first dropped file
+    if (file) handleFile(file);
+  });
+
+  // ── File-input change (clicking "Choose File") ───────────────────────────
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  // ── Core: show preview then call the API ─────────────────────────────────
+  function handleFile(file) {
+    // Basic client-side type check before even sending to server
+    if (!file.type.startsWith("image/")) {
+      showError("Please choose an image file (JPEG, PNG, WEBP).");
+      return;
+    }
+
+    // Show preview using a local URL — no upload needed just for preview
+    // URL.createObjectURL() creates a temporary in-browser URL for the file
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+
+    // Reset previous state
+    result.style.display  = "none";
+    errorBox.style.display = "none";
+    spinner.style.display  = "block";
+
+    // Build the multipart form and send to the API
+    const formData = new FormData();
+    formData.append("file", file);             // "file" must match FastAPI param name
+
+    // fetch() makes the HTTP request
+    // WHY fetch() and not XMLHttpRequest?
+    //   fetch() is modern, Promise-based, and much cleaner to read.
+    fetch(API_URL, { method: "POST", body: formData })
+      .then(response => {
+        // response.ok is true for 2xx status codes
+        if (!response.ok) {
+          return response.json().then(err => {
+            // FastAPI returns {"detail": "..."} for HTTP errors
+            throw new Error(err.detail || "Server error");
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        // data = {"label": "Hotdog!", "confidence": 0.93}
+        spinner.style.display = "none";
+        showResult(data.label, data.confidence);
+      })
+      .catch(err => {
+        spinner.style.display = "none";
+        // Network error (API not running) or 4xx/5xx from server
+        showError(err.message || "Could not reach the API. Is the server running?");
+      });
+  }
+
+  // ── Show the prediction result ───────────────────────────────────────────
+  function showResult(label, confidence) {
+    const isHotdog  = label === "Hotdog!";
+    const pct       = (confidence * 100).toFixed(1);
+
+    resultLbl.textContent  = isHotdog ? "🌭 Hotdog!" : "❌ Not Hotdog!";
+    resultLbl.style.color  = isHotdog ? "#27ae60" : "#e74c3c";
+    resultConf.textContent = `Confidence: ${pct}%`;
+
+    result.style.display   = "block";
+  }
+
+  // ── Show an error message ────────────────────────────────────────────────
+  function showError(msg) {
+    errorBox.textContent   = "Error: " + msg;
+    errorBox.style.display = "block";
+  }
+</script>
+
+</body>
+</html>

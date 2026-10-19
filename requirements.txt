@@ -1,0 +1,15 @@
+# ── Core ML ──────────────────────────────────────────────────────────────────
+torch>=2.2.0          # Deep learning framework
+torchvision>=0.17.0   # Pre-trained models + image transforms
+Pillow>=10.0.0        # Image loading / decoding
+
+# ── Training utilities ────────────────────────────────────────────────────────
+scikit-learn>=1.4.0   # Metrics: accuracy, precision, recall, F1, confusion matrix
+matplotlib>=3.8.0     # Plotting training curves and confusion matrix
+numpy>=1.26.0         # Numerical arrays (PyTorch tensors are built on top of this)
+
+# ── API ───────────────────────────────────────────────────────────────────────
+fastapi>=0.110.0      # Web framework for our REST API
+uvicorn>=0.29.0       # ASGI server that runs FastAPI
+python-multipart>=0.0.9  # Needed for FastAPI to accept file uploads
+

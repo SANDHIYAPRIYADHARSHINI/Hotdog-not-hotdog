@@ -1,0 +1,39 @@
+# ── Dataset (never commit raw images — they're large and on Kaggle already) ──
+# The Kaggle archive extracts into train/ and test/ at the project root.
+data/
+train/
+test/
+
+# ── Saved model weights (large binary files; use cloud storage or share manually) ──
+weights/
+*.pt
+*.pth
+*.onnx
+
+# ── Python virtual environment ────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Python bytecode cache ─────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Kaggle credentials (NEVER commit your API token!) ────────────────────────
+kaggle.json
+.kaggle/
+
+# ── OS / editor clutter ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── Jupyter notebooks (we keep code modular, not in notebooks) ────────────────
+*.ipynb
+.ipynb_checkpoints/
+
+# ── Misc output files ─────────────────────────────────────────────────────────
+*.log
+plots/
